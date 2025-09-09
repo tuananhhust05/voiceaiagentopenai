@@ -223,7 +223,7 @@ async def initialize_session(openai_ws):
             "type": "realtime",
             "model": "gpt-realtime",
             "output_modalities": ["audio"],
-            "max_response_tokens": 200,
+            # "max_response_tokens": 200,
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcmu"},
