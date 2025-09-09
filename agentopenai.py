@@ -62,7 +62,7 @@ async def handle_incoming_call(request: Request):
 @app.post("/outbound-twiml")
 async def outbound_twiml(request: Request):
     response = VoiceResponse()
-    response.say("Hello! Please wait while we connect you to our AI voice assistant.")
+    response.say("Hello! I am supporter from 4skale , how can I help you ?")
     connect = Connect()
     connect.stream(url=f"wss://4skale.com/media-stream")
     response.append(connect)
