@@ -64,7 +64,7 @@ async def outbound_twiml(request: Request):
     response = VoiceResponse()
     response.say("Hello! Please wait while we connect you to our AI voice assistant.")
     connect = Connect()
-    connect.stream(url=f"wss://{request.url.hostname}/media-stream")
+    connect.stream(url=f"wscat -c wss://4skale.com/media-stream")
     response.append(connect)
     return HTMLResponse(content=str(response), media_type="application/xml")
 
