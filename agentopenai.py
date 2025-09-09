@@ -62,7 +62,7 @@ async def handle_incoming_call(request: Request):
 @app.post("/outbound-twiml")
 async def outbound_twiml(request: Request):
     response = VoiceResponse()
-    response.say("Hello! I am voice supported customer from 4skake. How can I help you?")
+    response.say("Hello! Please wait while we connect you to our AI voice assistant.")
     connect = Connect()
     connect.stream(url=f"wss://4skale.com/media-stream")
     response.append(connect)
@@ -223,7 +223,6 @@ async def initialize_session(openai_ws):
             "type": "realtime",
             "model": "gpt-realtime",
             "output_modalities": ["audio"],
-            # "max_response_tokens": 200,
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcmu"},
