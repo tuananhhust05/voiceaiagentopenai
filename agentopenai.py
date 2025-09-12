@@ -10,6 +10,8 @@ from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
 from dotenv import load_dotenv
 import wave
 from fastapi.responses import FileResponse
+import edge_tts
+from pydub import AudioSegment
 
 load_dotenv()
 
@@ -76,6 +78,18 @@ async def outbound_twiml(request: Request):
     connect.stream(url=f"wss://4skale.com/media-stream")
     response.append(connect)
     return HTMLResponse(content=str(response), media_type="application/xml")
+
+# --- Generate speech with edge-tts ---
+async def generate_tts_wav(text: str, output_file: str):
+    communicate = edge_tts.Communicate(text, voice="en-US-AriaNeural")  # English female voice
+    await communicate.save(output_file)
+
+# --- Convert to Twilio µ-law 8kHz mono WAV ---
+def convert_to_twilio_format(input_file: str, output_file: str):
+    audio = AudioSegment.from_file(input_file)
+    audio = audio.set_frame_rate(8000).set_channels(1)
+    audio.export(output_file, format="wav", codec="pcm_mulaw")
+    return output_file
 
 @app.websocket("/media-stream")
 # async def handle_media_stream(websocket: WebSocket):
@@ -213,13 +227,21 @@ async def outbound_twiml(request: Request):
 async def handle_media_stream_from_file(websocket: WebSocket):
     print("Client connected")
     await websocket.accept()
-
-    # Gửi audio từ file openai_output.wav về Twilio
-    file_path = "openai_output.wav"
+    
+    """
+    Instead of reading an existing file, we dynamically create one
+    with edge-tts, convert it, and stream it back to Twilio.
+    """
+    text_to_speak = "Hello! This is a live text-to-speech test using Edge TTS and Twilio."
+    raw_file = "edge_temp.wav"
+    await generate_tts_wav(text_to_speak, raw_file)
+    twilio_file = "edge_twilio.wav"
+    convert_to_twilio_format(raw_file, twilio_file)
+    # file_path = "openai_output.wav"
+    file_path = twilio_file
     with open(file_path, "rb") as f:
         audio_data = f.read()
-
-    # Chia nhỏ data thành chunks (Twilio media event thường là 160 bytes PCM mu-law)
+        
     chunk_size = 160
     stream_sid = None
 
