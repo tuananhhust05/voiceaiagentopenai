@@ -9,6 +9,8 @@ from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
 from dotenv import load_dotenv
 import wave
+from fastapi.responses import FileResponse
+
 load_dotenv()
 
 # Configuration
@@ -38,6 +40,13 @@ if not OPENAI_API_KEY:
 @app.get("/", response_class=JSONResponse)
 async def index_page():
     return {"message": "Twilio Media Stream Server is running!"}
+
+@app.get("/download-audio/{filename}")
+async def download_audio(filename: str):
+    file_path = os.path.join(".", filename)
+    if not os.path.exists(file_path):
+        return JSONResponse(content={"error": "File not found"}, status_code=404)
+    return FileResponse(path=file_path, filename=filename, media_type="audio/wav")
 
 @app.api_route("/incoming-call", methods=["GET", "POST"])
 async def handle_incoming_call(request: Request):
