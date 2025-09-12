@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
 from dotenv import load_dotenv
-
+import wave
 load_dotenv()
 
 # Configuration
@@ -72,6 +72,10 @@ async def outbound_twiml(request: Request):
 async def handle_media_stream(websocket: WebSocket):
     """Handle WebSocket connections between Twilio and OpenAI."""
     print("Client connected")
+    wave_file = wave.open("openai_output.wav", "wb")
+    wave_file.setnchannels(1)
+    wave_file.setsampwidth(1)   # mu-law là 8bit
+    wave_file.setframerate(8000)
     await websocket.accept()
 
     async with websockets.connect(
@@ -126,6 +130,8 @@ async def handle_media_stream(websocket: WebSocket):
                         print(f"Received event: {response['type']}", response)
 
                     if response.get('type') == 'response.output_audio.delta' and 'delta' in response:
+                        raw_audio = base64.b64decode(response['delta'])
+                        wave_file.writeframes(raw_audio)
                         audio_payload = base64.b64encode(base64.b64decode(response['delta'])).decode('utf-8')
                         audio_delta = {
                             "event": "media",
