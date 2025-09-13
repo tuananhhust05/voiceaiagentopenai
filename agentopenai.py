@@ -165,7 +165,7 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                                     llm_response = await transcribe_and_respond(speech_buffer)
                                     speech_buffer = b""
                                     print("llm response .....})))", llm_response)
-                                    if llm_response :
+                                    if llm_response and (interrupt == False):
                                         """
                                         Instead of reading an existing file, we dynamically create one
                                         with edge-tts, convert it, and stream it back to Twilio.
