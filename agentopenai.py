@@ -250,6 +250,7 @@ def convert_to_twilio_format(input_file: str, output_file: str):
 #         await asyncio.gather(receive_from_twilio(), send_to_twilio())
 
 async def handle_media_stream_from_file(websocket: WebSocket):
+    global buffer_pcm, speech_buffer, stream_sid
     print("Client connected")
     await websocket.accept()
     async for message in websocket.iter_text():
