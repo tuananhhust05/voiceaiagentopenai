@@ -180,29 +180,31 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                                         raw_file = "edge_temp.wav"
                                         # await generate_tts_wav(llm_response, raw_file)
                                         twilio_file = "edge_twilio.wav"
-                                        convert_to_twilio_format(raw_file, twilio_file)
-                                        file_path = twilio_file
-                                        with open(file_path, "rb") as f:
-                                            audio_data = f.read()  
-                                        chunk_size = 160
-                                        try:  
-                                            print("Start send ...")
-                                            for i in range(0, len(audio_data), chunk_size):
-                                                if (interrupt == False): 
-                                                    chunk = audio_data[i:i+chunk_size]
-                                                    audio_payload = base64.b64encode(chunk).decode('utf-8')
-                                                    audio_delta = {
-                                                        "event": "media",
-                                                        "streamSid": stream_sid,
-                                                        "media": {"payload": audio_payload}
-                                                    }
-                                                    await websocket.send_json(audio_delta)
-                                            await websocket.send_json({
-                                                "event": "stop",
-                                                "streamSid": stream_sid
-                                            })
-                                        except Exception as e:
-                                            print(f"Error: {e}")
+                                        if (interrupt == False): 
+                                            convert_to_twilio_format(raw_file, twilio_file)
+                                            file_path = twilio_file
+                                            with open(file_path, "rb") as f:
+                                                audio_data = f.read()  
+                                            chunk_size = 160
+                                            if (interrupt == False):
+                                                try:  
+                                                    print("Start send ...")
+                                                    for i in range(0, len(audio_data), chunk_size):
+                                                        if (interrupt == False): 
+                                                            chunk = audio_data[i:i+chunk_size]
+                                                            audio_payload = base64.b64encode(chunk).decode('utf-8')
+                                                            audio_delta = {
+                                                                "event": "media",
+                                                                "streamSid": stream_sid,
+                                                                "media": {"payload": audio_payload}
+                                                            }
+                                                            await websocket.send_json(audio_delta)
+                                                    await websocket.send_json({
+                                                        "event": "stop",
+                                                        "streamSid": stream_sid
+                                                    })
+                                                except Exception as e:
+                                                    print(f"Error: {e}")
                                 except Exception as e:
                                     traceback.print_exc()
                             interrupt = False
@@ -210,11 +212,13 @@ async def handle_media_stream_from_file(websocket: WebSocket):
 
 # ==== TRANSCRIBE + CALL LLM ====
 async def transcribe_and_respond(pcm_bytes):
-    global is_processing
+    global is_processing, interrupt
     if is_processing:
         print("⏳ waiting for previous transcription to finish...")
         return None
-
+    if interrupt:
+        print("⏳ interrupted by new speech, skipping...")
+        return None
     # convert cho Whisper
     audio_np = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     sf.write("temp.wav", audio_np, sample_rate)
