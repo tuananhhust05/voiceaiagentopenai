@@ -292,7 +292,7 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                             """
                             print("Start create file")
                             wav = tts.synthesizer.tts(
-                                text="Hello with preloaded embedding",
+                                text=llm_response,
                                 speaker_name=name,
                                 language_name="en"
                             )
