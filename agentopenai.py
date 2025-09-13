@@ -152,8 +152,8 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                     silence_counter = 0
                     speech_buffer += frame
                 else:
-                    silence_counter += 1
-                    if(silence_counter > hangover_frames):
+                    # silence_counter += 1
+                    # if(silence_counter > hangover_frames):
                         if len(speech_buffer) > 0:
                                 if (interrupt == False): 
                                     llm_response = await transcribe_and_respond(speech_buffer)
