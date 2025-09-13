@@ -354,7 +354,7 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                                 
                             chunk_size = 160
                             stream_sid = None
-
+                            print("Sending TTS audio back to Twilio...")
                             try:
                                 async for message in websocket.iter_text():
                                     data = json.loads(message)
