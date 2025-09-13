@@ -127,6 +127,7 @@ async def handle_media_stream_from_file(websocket: WebSocket):
     global buffer_pcm, speech_buffer, stream_sid, interrupt,hangover_frames
     print("Client connected")
     await websocket.accept()
+    silence_counter = 0
     async for message in websocket.iter_text():
         try:
             data = json.loads(message)
@@ -142,7 +143,7 @@ async def handle_media_stream_from_file(websocket: WebSocket):
             ulaw_bytes = base64.b64decode(payload_b64)
             pcm16_bytes = audioop.ulaw2lin(ulaw_bytes, 2)
             buffer_pcm += pcm16_bytes
-            silence_counter = 0
+            
             while len(buffer_pcm) >= frame_bytes:
                 frame = buffer_pcm[:frame_bytes]
                 buffer_pcm = buffer_pcm[frame_bytes:]
