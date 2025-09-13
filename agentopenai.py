@@ -286,9 +286,9 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                         with edge-tts, convert it, and stream it back to Twilio.
                         """
                         print("Start create file")
-                        text_to_speak = "Hello! This is a live text-to-speech test using Edge TTS and Twilio."
+                        # text_to_speak = "Hello! This is a live text-to-speech test using Edge TTS and Twilio."
                         raw_file = "edge_temp.wav"
-                        await generate_tts_wav(text_to_speak, raw_file)
+                        await generate_tts_wav(llm_response, raw_file)
                         twilio_file = "edge_twilio.wav"
                         convert_to_twilio_format(raw_file, twilio_file)
                         # file_path = "openai_output.wav"
@@ -433,39 +433,57 @@ async def transcribe_and_respond(pcm_bytes):
     is_processing = True
     llm_response = "Please repeat that."
 
-    # try:
-    #     payload = {
-    #         "object": "whatsapp_business_account",
-    #         "entry": [
-    #             {
-    #                 "id": "0",
-    #                 "changes": [
-    #                     {
-    #                         "field": "messages",
-    #                         "value": {
-    #                             "messaging_product": "whatsapp",
-    #                             "messages": [
-    #                                 {
-    #                                     "type": "text",
-    #                                     "text": {"body": text.strip()}
-    #                                 }
-    #                             ]
-    #                         }
-    #                     }
-    #                 ]
-    #             }
-    #         ]
-    #     }
-    #     response = requests.post(
-    #         "http://127.0.0.1:8501/webhook",
-    #         json=payload,
-    #         headers={"Content-Type": "application/json"},
-    #         timeout=10
-    #     )
-    #     response.raise_for_status()
-    #     llm_response = response.json().get("reply", "Please repeat that.")
-    # except Exception as e:
-    #     print("❌ Webhook error:", e)
+    try:
+        
+        payload = {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "id": "0",
+                "changes": [
+                    {
+                        "field": "messages",
+                        "value": {
+                            "messaging_product": "whatsapp",
+                            "metadata": {
+                                "display_phone_number": "83868",
+                                "phone_number_id": "123456123"
+                            },
+                            "contacts": [
+                                {
+                                    "profile": {
+                                        "name": "test user name"
+                                    },
+                                    "wa_id": "16315558881180"
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "from": "16315551180",
+                                    "id": "ABGGFlA5Fpa",
+                                    "timestamp": "1504902988",
+                                    "type": "text",
+                                    "text": {
+                                        "body": text.strip()
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+        response = requests.post(
+            "http://127.0.0.1:8501/webhook",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=10
+        )
+        response.raise_for_status()
+        llm_response = response.json().get("reply", "Please repeat that.")
+    except Exception as e:
+        print("❌ Webhook error:", e)
 
     print("🤖 LLM Response:", llm_response)
     is_processing = False
