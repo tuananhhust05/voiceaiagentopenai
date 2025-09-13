@@ -18,12 +18,17 @@ import requests
 import audioop
 import numpy as np
 from faster_whisper import WhisperModel
-
+from TTS.api import TTS
+tts = TTS("tts_models/multilingual/multi-dataset/your_tts")
 load_dotenv()
 
 # ==== Faster-Whisper model ====
 from faster_whisper import WhisperModel
 model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+speaker_embedding = tts.synthesizer.tts_model.speaker_manager.compute_embedding_from_clip("customvoice.wav")
+name = "andrea"
+tts.synthesizer.tts_model.speaker_manager.name_to_id[name] = 0
+tts.synthesizer.tts_model.speaker_manager.embeddings_by_names[name] = [speaker_embedding] 
 
 # ==== Global Config ====
 vad = webrtcvad.Vad(0)  # 0 = nhạy thấp, 3 = nhạy cao
@@ -286,8 +291,14 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                             with edge-tts, convert it, and stream it back to Twilio.
                             """
                             print("Start create file")
+                            wav = tts.synthesizer.tts(
+                                text="Hello with preloaded embedding",
+                                speaker_name=name,
+                                language_name="en"
+                            )
+                            tts.synthesizer.save_wav(wav, "edge_temp.wav")
                             raw_file = "edge_temp.wav"
-                            await generate_tts_wav(llm_response, raw_file)
+                            # await generate_tts_wav(llm_response, raw_file)
                             twilio_file = "edge_twilio.wav"
                             convert_to_twilio_format(raw_file, twilio_file)
                             file_path = twilio_file
