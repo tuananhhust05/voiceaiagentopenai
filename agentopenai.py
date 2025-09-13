@@ -343,6 +343,7 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                         if llm_response:
                             # convert response -> TTS
                             raw_file = "edge_temp.wav"
+                            print("llm response:", llm_response)
                             await generate_tts_wav(llm_response, raw_file)
                             twilio_file = "edge_twilio.wav"
                             convert_to_twilio_format(raw_file, twilio_file)
