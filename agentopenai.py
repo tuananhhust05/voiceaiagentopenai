@@ -278,8 +278,8 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                 else:
                    if len(speech_buffer) > 0:
                         # Khi phát hiện silence → xử lý đoạn speech
-                        # llm_response = await transcribe_and_respond(speech_buffer)
-                        # speech_buffer = b""
+                        llm_response = await transcribe_and_respond(speech_buffer)
+                        speech_buffer = b""
 
                         """
                         Instead of reading an existing file, we dynamically create one
