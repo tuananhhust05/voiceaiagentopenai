@@ -190,7 +190,11 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                                                 try:  
                                                     print("Start send ...")
                                                     for i in range(0, len(audio_data), chunk_size):
+                                                        if interrupt:  # nếu user cắt ngang -> stop ngay
+                                                            print("🛑 TTS stopped due to interruption.")
+                                                            break
                                                         if (interrupt == False): 
+                                                            
                                                             chunk = audio_data[i:i+chunk_size]
                                                             audio_payload = base64.b64encode(chunk).decode('utf-8')
                                                             audio_delta = {
