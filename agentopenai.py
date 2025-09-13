@@ -154,58 +154,59 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                     silence_counter = 0
                     speech_buffer += frame
                 else:
-                    silence_counter += 1
+                    # silence_counter += 1
+                    print("interrupt", interrupt)
                     interrupt = False
-                    print("Silence counter:", silence_counter)
-                    if(silence_counter > 2):
-                        if len(speech_buffer) > 0:
-                                if (interrupt == False): 
-                                    try:
-                                        llm_response = await transcribe_and_respond(speech_buffer)
-                                        speech_buffer = b""
-                                        print("llm response .....})))", llm_response)
-                                        if llm_response :
-                                            """
-                                            Instead of reading an existing file, we dynamically create one
-                                            with edge-tts, convert it, and stream it back to Twilio.
-                                            """
-                                            print("Start create file")
-                                            wav = tts.synthesizer.tts(
-                                                text=llm_response,
-                                                speaker_name=name,
-                                                language_name="en"
-                                            )
-                                            tts.synthesizer.save_wav(wav, "edge_temp.wav")
-                                            raw_file = "edge_temp.wav"
-                                            # await generate_tts_wav(llm_response, raw_file)
-                                            twilio_file = "edge_twilio.wav"
-                                            convert_to_twilio_format(raw_file, twilio_file)
-                                            file_path = twilio_file
-                                            with open(file_path, "rb") as f:
-                                                audio_data = f.read()  
-                                            chunk_size = 160
-                                            try:  
-                                                print("Start send ...")
-                                                for i in range(0, len(audio_data), chunk_size):
-                                                    if (interrupt == False): 
-                                                        chunk = audio_data[i:i+chunk_size]
-                                                        audio_payload = base64.b64encode(chunk).decode('utf-8')
-                                                        audio_delta = {
-                                                            "event": "media",
-                                                            "streamSid": stream_sid,
-                                                            "media": {"payload": audio_payload}
-                                                        }
-                                                        await websocket.send_json(audio_delta)
-                                                await websocket.send_json({
-                                                    "event": "stop",
-                                                    "streamSid": stream_sid
-                                                })
-                                            except Exception as e:
-                                                print(f"Error: {e}")
-                                    except Exception as e:
-                                        traceback.print_exc()
-                                interrupt = False
-                        interrupt = False
+                    # print("Silence counter:", silence_counter)
+                    # if(silence_counter > 2):
+                    if len(speech_buffer) > 0:
+                            if (interrupt == False): 
+                                try:
+                                    llm_response = await transcribe_and_respond(speech_buffer)
+                                    speech_buffer = b""
+                                    print("llm response .....})))", llm_response)
+                                    if llm_response :
+                                        """
+                                        Instead of reading an existing file, we dynamically create one
+                                        with edge-tts, convert it, and stream it back to Twilio.
+                                        """
+                                        print("Start create file")
+                                        wav = tts.synthesizer.tts(
+                                            text=llm_response,
+                                            speaker_name=name,
+                                            language_name="en"
+                                        )
+                                        tts.synthesizer.save_wav(wav, "edge_temp.wav")
+                                        raw_file = "edge_temp.wav"
+                                        # await generate_tts_wav(llm_response, raw_file)
+                                        twilio_file = "edge_twilio.wav"
+                                        convert_to_twilio_format(raw_file, twilio_file)
+                                        file_path = twilio_file
+                                        with open(file_path, "rb") as f:
+                                            audio_data = f.read()  
+                                        chunk_size = 160
+                                        try:  
+                                            print("Start send ...")
+                                            for i in range(0, len(audio_data), chunk_size):
+                                                if (interrupt == False): 
+                                                    chunk = audio_data[i:i+chunk_size]
+                                                    audio_payload = base64.b64encode(chunk).decode('utf-8')
+                                                    audio_delta = {
+                                                        "event": "media",
+                                                        "streamSid": stream_sid,
+                                                        "media": {"payload": audio_payload}
+                                                    }
+                                                    await websocket.send_json(audio_delta)
+                                            await websocket.send_json({
+                                                "event": "stop",
+                                                "streamSid": stream_sid
+                                            })
+                                        except Exception as e:
+                                            print(f"Error: {e}")
+                                except Exception as e:
+                                    traceback.print_exc()
+                            interrupt = False
+                    interrupt = False
 
 # ==== TRANSCRIBE + CALL LLM ====
 async def transcribe_and_respond(pcm_bytes):
