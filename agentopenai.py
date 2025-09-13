@@ -123,91 +123,140 @@ def convert_to_twilio_format(input_file: str, output_file: str):
     return output_file
 
 @app.websocket("/media-stream")
-# @app.websocket("/media-stream")
 async def handle_media_stream_from_file(websocket: WebSocket):
-    global buffer_pcm, speech_buffer, stream_sid, interrupt, hangover_frames
+    global buffer_pcm, speech_buffer, stream_sid, interrupt
     print("Client connected")
     await websocket.accept()
+
+    # Local state for this connection
     silence_counter = 0
+    user_speaking = False
+    playback_task = None
+    ai_playing = False
 
-    async for message in websocket.iter_text():
+    # nested coroutine to stream audio back to Twilio (runs concurrently)
+    async def play_audio_and_send(audio_bytes: bytes):
+        nonlocal playback_task, ai_playing
+        global interrupt
+        ai_playing = True
+        interrupt = False  # allow playback by default; will be set True by VAD if user speaks
         try:
-            data = json.loads(message)
+            chunk_size = 160
+            for i in range(0, len(audio_bytes), chunk_size):
+                if interrupt:
+                    print("🛑 Playback interrupted by user speech.")
+                    break
+                chunk = audio_bytes[i:i+chunk_size]
+                audio_payload = base64.b64encode(chunk).decode("utf-8")
+                audio_delta = {
+                    "event": "media",
+                    "streamSid": stream_sid,
+                    "media": {"payload": audio_payload}
+                }
+                # send chunk
+                await websocket.send_json(audio_delta)
+                # yield to event loop so we can receive incoming media while playing
+                await asyncio.sleep(0)
+            # only send stop if playback finished naturally
+            if not interrupt:
+                await websocket.send_json({"event": "stop", "streamSid": stream_sid})
         except Exception as e:
-            print("❌ JSON parse error:", e)
-            continue
+            print("Playback error:", e)
+        finally:
+            ai_playing = False
+            # mark task as finished
+            playback_task = None
 
-        event = data.get("event")
-        if event == "start":
-            stream_sid = data["start"]["streamSid"]
-            print(f"Incoming stream started: {stream_sid}")
+    try:
+        async for message in websocket.iter_text():
+            try:
+                data = json.loads(message)
+            except Exception as e:
+                print("❌ JSON parse error:", e)
+                continue
 
-        elif event == "media":
-            payload_b64 = data["media"]["payload"]
-            ulaw_bytes = base64.b64decode(payload_b64)
-            pcm16_bytes = audioop.ulaw2lin(ulaw_bytes, 2)
-            buffer_pcm += pcm16_bytes
+            event = data.get("event")
+            if event == "start":
+                stream_sid = data["start"]["streamSid"]
+                print(f"Incoming stream started: {stream_sid}")
 
-            while len(buffer_pcm) >= frame_bytes:
-                frame = buffer_pcm[:frame_bytes]
-                buffer_pcm = buffer_pcm[frame_bytes:]
+            elif event == "media":
+                payload_b64 = data["media"]["payload"]
+                ulaw_bytes = base64.b64decode(payload_b64)
+                pcm16_bytes = audioop.ulaw2lin(ulaw_bytes, 2)
+                buffer_pcm += pcm16_bytes
 
-                is_speech = vad.is_speech(frame, sample_rate)
+                # process full frames
+                while len(buffer_pcm) >= frame_bytes:
+                    frame = buffer_pcm[:frame_bytes]
+                    buffer_pcm = buffer_pcm[frame_bytes:]
 
-                if is_speech:
-                    # user nói chen => ngắt phát TTS ngay
-                    if not interrupt:
-                        print("⚡ User interrupted! Stopping AI speech...")
-                    interrupt = True
-                    speech_buffer += frame
-                    silence_counter = 0
+                    is_speech = vad.is_speech(frame, sample_rate)
 
-                else:
-                    silence_counter += 1
-                    if silence_counter >= hangover_frames and len(speech_buffer) > 0:
-                        try:
-                            llm_response = await transcribe_and_respond(speech_buffer)
-                            speech_buffer = b""
-                            silence_counter = 0
+                    if is_speech:
+                        # user đang nói
+                        user_speaking = True
+                        silence_counter = 0
+                        speech_buffer += frame
 
-                            if llm_response:
-                                # reset interrupt để cho phép phát TTS mới
-                                interrupt = False
+                        # nếu AI đang phát, request dừng (set global interrupt)
+                        if playback_task is not None and not playback_task.done():
+                            if not interrupt:
+                                print("⚡ User interrupted! Stopping AI speech...")
+                            interrupt = True
 
-                                # tạo file âm thanh
-                                wav = tts.synthesizer.tts(
-                                    text=llm_response,
-                                    speaker_name=name,
-                                    language_name="en"
-                                )
-                                tts.synthesizer.save_wav(wav, "edge_temp.wav")
-                                convert_to_twilio_format("edge_temp.wav", "edge_twilio.wav")
+                    else:
+                        # silence frame
+                        if user_speaking:
+                            silence_counter += 1
+                            # khi có đủ hangover (ngưỡng silence) -> coi như user đã dừng
+                            if silence_counter >= hangover_frames:
+                                user_speaking = False
+                                silence_counter = 0
+                                # extract buffer for processing
+                                pcm_to_process = speech_buffer
+                                speech_buffer = b""
 
-                                with open("edge_twilio.wav", "rb") as f:
-                                    audio_data = f.read()
+                                # ensure current playback task has stopped before transcribing/creating reply
+                                if playback_task is not None:
+                                    try:
+                                        await playback_task
+                                    except Exception:
+                                        pass
 
-                                chunk_size = 160
-                                for i in range(0, len(audio_data), chunk_size):
-                                    if interrupt:  # user vừa nói chen
-                                        print("🛑 TTS stopped due to interruption.")
-                                        break
-                                    chunk = audio_data[i:i+chunk_size]
-                                    audio_payload = base64.b64encode(chunk).decode('utf-8')
-                                    audio_delta = {
-                                        "event": "media",
-                                        "streamSid": stream_sid,
-                                        "media": {"payload": audio_payload}
-                                    }
-                                    await websocket.send_json(audio_delta)
+                                # --- TRANSCRIBE + LLM CALL ---
+                                try:
+                                    llm_response = await transcribe_and_respond(pcm_to_process)
+                                except Exception as e:
+                                    traceback.print_exc()
+                                    llm_response = None
 
-                                if not interrupt:
-                                    await websocket.send_json({
-                                        "event": "stop",
-                                        "streamSid": stream_sid
-                                    })
-
-                        except Exception as e:
-                            traceback.print_exc()
+                                if llm_response:
+                                    # tạo file TTS
+                                    try:
+                                        wav = tts.synthesizer.tts(
+                                            text=llm_response,
+                                            speaker_name=name,
+                                            language_name="en"
+                                        )
+                                        tts.synthesizer.save_wav(wav, "edge_temp.wav")
+                                        convert_to_twilio_format("edge_temp.wav", "edge_twilio.wav")
+                                        with open("edge_twilio.wav", "rb") as f:
+                                            audio_data = f.read()
+                                        # start playback concurrently so we can keep receiving media
+                                        # wait for any previous playback_task to finish
+                                        if playback_task is not None:
+                                            try:
+                                                await playback_task
+                                            except Exception:
+                                                pass
+                                        playback_task = asyncio.create_task(play_audio_and_send(audio_data))
+                                    except Exception:
+                                        traceback.print_exc()
+    except WebSocketDisconnect:
+        print("INFO:     connection closed")
+    except Exception:
+        traceback.print_exc()
 
 # ==== TRANSCRIBE + CALL LLM ====
 async def transcribe_and_respond(pcm_bytes):
