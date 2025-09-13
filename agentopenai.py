@@ -18,12 +18,12 @@ import requests
 import audioop
 import numpy as np
 from faster_whisper import WhisperModel
-model = WhisperModel("small", device="cpu", compute_type="int8")
+
 load_dotenv()
 
 # ==== Faster-Whisper model ====
 from faster_whisper import WhisperModel
-model = WhisperModel("small", device="cpu", compute_type="int8")
+model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
 
 # ==== Global Config ====
 vad = webrtcvad.Vad(0)  # 0 = nhạy thấp, 3 = nhạy cao
@@ -403,39 +403,39 @@ async def transcribe_and_respond(pcm_bytes):
     is_processing = True
     llm_response = "Please repeat that."
 
-    try:
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "0",
-                    "changes": [
-                        {
-                            "field": "messages",
-                            "value": {
-                                "messaging_product": "whatsapp",
-                                "messages": [
-                                    {
-                                        "type": "text",
-                                        "text": {"body": text.strip()}
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-        response = requests.post(
-            "http://127.0.0.1:8501/webhook",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
-        )
-        response.raise_for_status()
-        llm_response = response.json().get("reply", "Please repeat that.")
-    except Exception as e:
-        print("❌ Webhook error:", e)
+    # try:
+    #     payload = {
+    #         "object": "whatsapp_business_account",
+    #         "entry": [
+    #             {
+    #                 "id": "0",
+    #                 "changes": [
+    #                     {
+    #                         "field": "messages",
+    #                         "value": {
+    #                             "messaging_product": "whatsapp",
+    #                             "messages": [
+    #                                 {
+    #                                     "type": "text",
+    #                                     "text": {"body": text.strip()}
+    #                                 }
+    #                             ]
+    #                         }
+    #                     }
+    #                 ]
+    #             }
+    #         ]
+    #     }
+    #     response = requests.post(
+    #         "http://127.0.0.1:8501/webhook",
+    #         json=payload,
+    #         headers={"Content-Type": "application/json"},
+    #         timeout=10
+    #     )
+    #     response.raise_for_status()
+    #     llm_response = response.json().get("reply", "Please repeat that.")
+    # except Exception as e:
+    #     print("❌ Webhook error:", e)
 
     print("🤖 LLM Response:", llm_response)
     is_processing = False
