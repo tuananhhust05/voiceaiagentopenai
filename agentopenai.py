@@ -297,7 +297,7 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                             audio_data = f.read()
                             
                         chunk_size = 160
-                        stream_sid = None
+                        # stream_sid = None
 
                         try:
                             # async for message in websocket.iter_text():
@@ -311,14 +311,14 @@ async def handle_media_stream_from_file(websocket: WebSocket):
                             for i in range(0, len(audio_data), chunk_size):
                                 chunk = audio_data[i:i+chunk_size]
                                 audio_payload = base64.b64encode(chunk).decode('utf-8')
-
+                      
                                 audio_delta = {
                                     "event": "media",
                                     "streamSid": stream_sid,
                                     "media": {"payload": audio_payload}
                                 }
                                 await websocket.send_json(audio_delta)
-
+                            
                             # Kết thúc stream
                             await websocket.send_json({
                                 "event": "stop",
