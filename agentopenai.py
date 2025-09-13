@@ -16,6 +16,7 @@ import webrtcvad
 import soundfile as sf
 import requests
 import audioop
+import numpy as np
 from faster_whisper import WhisperModel
 model = WhisperModel("small", device="cpu", compute_type="int8")
 load_dotenv()
