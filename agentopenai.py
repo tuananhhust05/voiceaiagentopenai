@@ -26,7 +26,7 @@ load_dotenv()
 # ==== Faster-Whisper model ====
 from faster_whisper import WhisperModel
 model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
-speaker_embedding = tts.synthesizer.tts_model.speaker_manager.compute_embedding_from_clip("customvoice.wav")
+speaker_embedding = tts.synthesizer.tts_model.speaker_manager.compute_embedding_from_clip("customvoice2.wav")
 name = "andrea"
 tts.synthesizer.tts_model.speaker_manager.name_to_id[name] = 0
 tts.synthesizer.tts_model.speaker_manager.embeddings_by_names[name] = [speaker_embedding] 
