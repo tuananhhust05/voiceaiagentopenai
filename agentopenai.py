@@ -4,6 +4,7 @@ import base64
 import asyncio
 import websockets
 import uuid
+import audioop
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
@@ -42,11 +43,11 @@ SHOW_TIMING_MATH = False
 
 app = FastAPI()
 
-# Create uploads folder
+# Folder for recordings
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Serve static files
+# Static mount
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 if not OPENAI_API_KEY:
@@ -65,7 +66,7 @@ async def handle_incoming_call(request: Request):
         voice="Google.en-US-Chirp3-HD-Aoede"
     )
     response.pause(length=1)
-    response.say(   
+    response.say(
         "O.K. you can start talking!",
         voice="Google.en-US-Chirp3-HD-Aoede"
     )
@@ -88,16 +89,16 @@ async def outbound_twiml(request: Request):
 async def handle_media_stream(websocket: WebSocket):
     """Handle WebSocket connections between Twilio and OpenAI."""
     print("Client connected")
+    await websocket.accept()
 
-    # Create unique wav file per call
+    # Tạo file ghi âm duy nhất cho cuộc gọi
     filename = f"{uuid.uuid4()}.wav"
     filepath = os.path.join(UPLOAD_DIR, filename)
+
     wave_file = wave.open(filepath, "wb")
     wave_file.setnchannels(1)
-    wave_file.setsampwidth(1)   # mu-law 8bit
+    wave_file.setsampwidth(2)   # 16-bit PCM
     wave_file.setframerate(8000)
-
-    await websocket.accept()
 
     try:
         async with websockets.connect(
@@ -114,8 +115,9 @@ async def handle_media_stream(websocket: WebSocket):
             last_assistant_item = None
             mark_queue = []
             response_start_timestamp_twilio = None
-            
+
             async def receive_from_twilio():
+                """Receive audio data from Twilio and send it to the OpenAI Realtime API."""
                 nonlocal stream_sid, latest_media_timestamp
                 try:
                     async for message in websocket.iter_text():
@@ -142,6 +144,7 @@ async def handle_media_stream(websocket: WebSocket):
                         await openai_ws.close()
 
             async def send_to_twilio():
+                """Receive events from the OpenAI Realtime API, send audio back to Twilio."""
                 nonlocal stream_sid, last_assistant_item, response_start_timestamp_twilio
                 try:
                     async for openai_message in openai_ws:
@@ -151,7 +154,11 @@ async def handle_media_stream(websocket: WebSocket):
 
                         if response.get('type') == 'response.output_audio.delta' and 'delta' in response:
                             raw_audio = base64.b64decode(response['delta'])
-                            wave_file.writeframes(raw_audio)  # ghi ra file
+                            # Decode từ µ-law -> PCM16 trước khi ghi file
+                            pcm_data = audioop.ulaw2lin(raw_audio, 2)
+                            wave_file.writeframes(pcm_data)
+
+                            # Gửi trả về Twilio vẫn giữ nguyên PCMU (mu-law)
                             audio_payload = base64.b64encode(raw_audio).decode('utf-8')
                             audio_delta = {
                                 "event": "media",
@@ -179,6 +186,7 @@ async def handle_media_stream(websocket: WebSocket):
                     print(f"Error in send_to_twilio: {e}")
 
             async def handle_speech_started_event():
+                """Handle interruption when the caller's speech starts."""
                 nonlocal response_start_timestamp_twilio, last_assistant_item
                 print("Handling speech started event.")
                 if mark_queue and response_start_timestamp_twilio is not None:
@@ -218,9 +226,6 @@ async def handle_media_stream(websocket: WebSocket):
                     mark_queue.append('responsePart')
 
             await asyncio.gather(receive_from_twilio(), send_to_twilio())
-
-    except Exception as e:
-        print(f"Error in media stream: {e}")
     finally:
         wave_file.close()
         print(f"Call ended. Audio saved: {filepath}")
@@ -267,7 +272,7 @@ async def initialize_session(openai_ws):
     print('Sending session update:', json.dumps(session_update))
     await openai_ws.send(json.dumps(session_update))
 
-    # Uncomment the next line to have the AI speak first
+    # Uncomment if you want AI to greet first
     # await send_initial_conversation_item(openai_ws)
 
 if __name__ == "__main__":
