@@ -7,7 +7,7 @@ import uuid
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
-from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
+from twilio.twiml.voice_response import VoiceResponse, Connect
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 import wave
@@ -242,14 +242,14 @@ async def handle_media_stream(websocket: WebSocket):
         payload = {
             "duration": duration,
             "recording_url": recording_url,
-            "transcript": "Transcripting.",   # TODO: tích hợp Whisper sau
+            "transcript": "Transcripting.",   # TODO: thay bằng transcript thực tế
             "sentiment": "positive",
             "sentiment_score": 0.85,
             "status": "completed"
         }
 
-        try:
-            async def call_webhook():
+        async def call_webhook():
+            try:
                 async with httpx.AsyncClient() as client:
                     r = await client.put(
                         "https://4skale.com/api/webhook/auto-update-latest",
@@ -257,10 +257,10 @@ async def handle_media_stream(websocket: WebSocket):
                         timeout=10.0
                     )
                     print("Webhook response:", r.status_code, r.text)
+            except Exception as e:
+                print("Failed to call webhook:", e)
 
-            asyncio.create_task(call_webhook())
-        except Exception as e:
-            print("Failed to call webhook:", e)
+        asyncio.create_task(call_webhook())
 
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item if AI talks first."""
