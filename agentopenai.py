@@ -14,6 +14,7 @@ import wave
 import httpx
 import glob
 from datetime import datetime
+import audioop
 
 load_dotenv()
 
@@ -97,7 +98,6 @@ def get_latest_file(folder: str):
 
 @app.post("/twilio/status-callback")
 async def twilio_status_callback(request: Request):
-    """API nhận callback từ Twilio khi cuộc gọi kết thúc"""
     form_data = await request.form()
     call_status = form_data.get("CallStatus")
     duration = form_data.get("CallDuration")
@@ -146,7 +146,7 @@ async def handle_media_stream(websocket: WebSocket):
     filepath = os.path.join(UPLOAD_DIR, filename)
     wave_file = wave.open(filepath, "wb")
     wave_file.setnchannels(1)
-    wave_file.setsampwidth(1)   # mu-law 8bit
+    wave_file.setsampwidth(2)   # <-- 16-bit PCM
     wave_file.setframerate(8000)
 
     await websocket.accept()
@@ -203,7 +203,15 @@ async def handle_media_stream(websocket: WebSocket):
 
                         if response.get('type') == 'response.output_audio.delta' and 'delta' in response:
                             raw_audio = base64.b64decode(response['delta'])
-                            wave_file.writeframes(raw_audio)  # ghi ra file
+
+                            # 🔑 Sửa: decode µ-law -> PCM16 trước khi ghi ra file
+                            try:
+                                decoded_pcm16 = audioop.ulaw2lin(raw_audio, 2)
+                                wave_file.writeframes(decoded_pcm16)
+                            except Exception as e:
+                                print("Error decoding audio:", e)
+
+                            # Gửi lại audio (giữ nguyên logic cũ: gửi µ-law cho Twilio)
                             audio_payload = base64.b64encode(raw_audio).decode('utf-8')
                             audio_delta = {
                                 "event": "media",
@@ -313,6 +321,7 @@ async def handle_media_stream(websocket: WebSocket):
 
         asyncio.create_task(call_webhook())
     
+
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item if AI talks first."""
     initial_conversation_item = {
