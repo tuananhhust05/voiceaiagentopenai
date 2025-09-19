@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 import wave
 import httpx
+import glob
+from datetime import datetime
 
 load_dotenv()
 
@@ -84,6 +86,55 @@ async def outbound_twiml(request: Request):
     connect.stream(url=f"wss://4skale.com/media-stream")
     response.append(connect)
     return HTMLResponse(content=str(response), media_type="application/xml")
+
+# Hàm lấy file mới nhất trong folder
+def get_latest_file(folder: str):
+    list_of_files = glob.glob(os.path.join(folder, "*"))
+    if not list_of_files:
+        return None
+    latest_file = max(list_of_files, key=os.path.getctime)
+    return latest_file
+
+@app.post("/twilio/status-callback")
+async def twilio_status_callback(request: Request):
+    """API nhận callback từ Twilio khi cuộc gọi kết thúc"""
+    form_data = await request.form()
+    call_status = form_data.get("CallStatus")
+    duration = form_data.get("CallDuration")
+    recording_url = form_data.get("RecordingUrl")
+
+    latest_file = get_latest_file(UPLOAD_DIR)
+
+    if not latest_file:
+        return JSONResponse({"error": "No file found in uploads/twilio"}, status_code=404)
+    
+    payload = {
+        "duration": duration or 0,
+        "recording_url": recording_url or f"/{latest_file}",
+        "transcript": "Transcripting.",  
+        "sentiment": "positive",
+        "sentiment_score": 0.85,
+        "status": call_status or "completed",
+        "local_file": latest_file,
+        "received_at": datetime.utcnow().isoformat()
+    }
+
+    
+    async def call_webhook():
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.put(
+                    "https://4skale.com/api/webhook/auto-update-latest",
+                    json=payload,
+                    timeout=10.0
+                )
+                print("Webhook response:", r.status_code, r.text)
+        except Exception as e:
+            print("Failed to call webhook:", e)
+
+    await call_webhook()
+
+    return JSONResponse({"message": "Callback processed", "payload": payload})
 
 @app.websocket("/media-stream")
 async def handle_media_stream(websocket: WebSocket):
@@ -261,7 +312,7 @@ async def handle_media_stream(websocket: WebSocket):
                 print("Failed to call webhook:", e)
 
         asyncio.create_task(call_webhook())
-
+    
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item if AI talks first."""
     initial_conversation_item = {
