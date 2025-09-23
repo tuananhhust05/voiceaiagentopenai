@@ -154,6 +154,7 @@ async def handle_media_stream(websocket: WebSocket):
 
     try:
         eleven_ws_url = f"wss://api.elevenlabs.io/v1/convai/agents/{AGENT_ID}/stream?api_key={ELEVEN_API_KEY}"
+        eleven_ws_url = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_7601k5tn5fffe65a7wjsg6tfd32z&conversation_signature=cvtkn_1601k5v68h0necjtbpae2b3w42wj"
         print("✅ Connecteing to ElevenLabs Agent",eleven_ws_url)
         async with websockets.connect(eleven_ws_url) as eleven_ws:
             print("✅ Connected to ElevenLabs Agent")
