@@ -140,7 +140,7 @@ async def twilio_status_callback(request: Request):
 
 @app.websocket("/media-stream")
 async def handle_media_stream(websocket: WebSocket):
-    """Proxy WebSocket giữa Twilio ↔ ElevenLabs Agent"""
+    """Proxy WebSocket giữa Twilio ↔ ElevenLabs Agent với commit buffer."""
     await websocket.accept()
     print("✅ Twilio connected")
 
@@ -190,13 +190,14 @@ async def handle_media_stream(websocket: WebSocket):
             await eleven_ws.send(json.dumps({"type": "response.create"}))
             print("💬 Initial message sent to ElevenLabs")
 
-            # --- Nhận dữ liệu từ Twilio ---
+            # --- Nhận audio từ Twilio ---
             async def receive_from_twilio():
                 try:
                     async for message in websocket.iter_text():
                         data = json.loads(message)
                         if data["event"] == "media":
                             audio_payload = data["media"]["payload"]  # base64 PCM
+                            # Append vào buffer ElevenLabs
                             await eleven_ws.send(json.dumps({
                                 "type": "input_audio_buffer.append",
                                 "audio": audio_payload
@@ -205,14 +206,18 @@ async def handle_media_stream(websocket: WebSocket):
                             print("📞 Twilio stream started")
                         elif data["event"] == "stop":
                             print("🛑 Twilio stream stopped")
+                            # Commit buffer và tạo response ngay khi kết thúc audio
+                            await eleven_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                            await eleven_ws.send(json.dumps({"type": "response.create"}))
                 except WebSocketDisconnect:
                     print("❌ Twilio disconnected")
 
-            # --- Nhận dữ liệu từ ElevenLabs ---
+            # --- Nhận audio/text từ ElevenLabs ---
             async def receive_from_eleven():
                 try:
                     async for msg in eleven_ws:
                         response = json.loads(msg)
+                        # Audio trả về
                         if response.get("type") == "output_audio_buffer.delta":
                             audio_b64 = response["audio"]
                             raw_audio = base64.b64decode(audio_b64)
@@ -222,10 +227,10 @@ async def handle_media_stream(websocket: WebSocket):
                                 "streamSid": "xxx",  # Twilio stream ID
                                 "media": {"payload": audio_b64}
                             })
+                        # Text output
                         elif response.get("type") == "message":
                             print("🗨️ Agent:", response.get("text"))
                         else:
-                            # Debug các event khác
                             if SHOW_TIMING_MATH:
                                 print("ElevenLabs Event:", response)
                 except Exception as e:
