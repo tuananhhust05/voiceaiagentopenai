@@ -153,19 +153,50 @@ async def handle_media_stream(websocket: WebSocket):
     wave_file.setframerate(8000)
 
     try:
-        eleven_ws_url = f"wss://api.elevenlabs.io/v1/convai/agents/{AGENT_ID}/stream?api_key={ELEVEN_API_KEY}"
-        eleven_ws_url = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_7601k5tn5fffe65a7wjsg6tfd32z&conversation_signature=cvtkn_1601k5v68h0necjtbpae2b3w42wj"
-        print("✅ Connecteing to ElevenLabs Agent",eleven_ws_url)
-        async with websockets.connect(eleven_ws_url) as eleven_ws:
+        # --- Signed URL của ElevenLabs ---
+        signed_url = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_7601k5tn5fffe65a7wjsg6tfd32z&conversation_signature=cvtkn_1601k5v68h0necjtbpae2b3w42wj"  # set từ .env
+        print("✅ Connecting to ElevenLabs Agent:", signed_url)
+
+        async with websockets.connect(signed_url) as eleven_ws:
             print("✅ Connected to ElevenLabs Agent")
 
+            # --- Khởi tạo session realtime ---
+            session_update = {
+                "type": "session.update",
+                "session": {
+                    "type": "realtime",
+                    "model": "gpt-realtime",
+                    "output_modalities": ["audio"],
+                    "audio": {
+                        "input": {"format": {"type": "audio/pcm"}},
+                        "output": {"format": {"type": "audio/pcm"}, "voice": VOICE}
+                    },
+                    "instructions": SYSTEM_MESSAGE,
+                }
+            }
+            await eleven_ws.send(json.dumps(session_update))
+            print("📄 Session update sent to ElevenLabs")
+
+            # --- Optional: AI nói trước ---
+            initial_message = {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Ciao! Come stai?"}]
+                }
+            }
+            await eleven_ws.send(json.dumps(initial_message))
+            await eleven_ws.send(json.dumps({"type": "response.create"}))
+            print("💬 Initial message sent to ElevenLabs")
+
+            # --- Nhận dữ liệu từ Twilio ---
             async def receive_from_twilio():
                 try:
                     async for message in websocket.iter_text():
                         data = json.loads(message)
                         if data["event"] == "media":
                             audio_payload = data["media"]["payload"]  # base64 PCM
-                            # gửi sang ElevenLabs
                             await eleven_ws.send(json.dumps({
                                 "type": "input_audio_buffer.append",
                                 "audio": audio_payload
@@ -177,16 +208,15 @@ async def handle_media_stream(websocket: WebSocket):
                 except WebSocketDisconnect:
                     print("❌ Twilio disconnected")
 
+            # --- Nhận dữ liệu từ ElevenLabs ---
             async def receive_from_eleven():
                 try:
                     async for msg in eleven_ws:
                         response = json.loads(msg)
                         if response.get("type") == "output_audio_buffer.delta":
-                            # ElevenLabs trả về audio PCM base64
                             audio_b64 = response["audio"]
                             raw_audio = base64.b64decode(audio_b64)
                             wave_file.writeframes(raw_audio)
-
                             await websocket.send_json({
                                 "event": "media",
                                 "streamSid": "xxx",  # Twilio stream ID
@@ -194,6 +224,10 @@ async def handle_media_stream(websocket: WebSocket):
                             })
                         elif response.get("type") == "message":
                             print("🗨️ Agent:", response.get("text"))
+                        else:
+                            # Debug các event khác
+                            if SHOW_TIMING_MATH:
+                                print("ElevenLabs Event:", response)
                 except Exception as e:
                     print("Error from ElevenLabs:", e)
 
@@ -201,6 +235,7 @@ async def handle_media_stream(websocket: WebSocket):
 
     except Exception as e:
         print("❌ Error in media stream:", e)
+
     finally:
         wave_file.close()
         print(f"Call ended. Audio saved: {filepath}")
@@ -221,7 +256,7 @@ async def handle_media_stream(websocket: WebSocket):
         payload = {
             "duration": duration,
             "recording_url": recording_url,
-            "transcript": "Transcripting.",   # TODO: thay bằng transcript thực tế
+            "transcript": "Transcripting.",  # TODO: thay bằng transcript thực tế
             "sentiment": "positive",
             "sentiment_score": 0.85,
             "status": "completed"
